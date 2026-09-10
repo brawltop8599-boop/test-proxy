@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
 from fastapi.responses import RedirectResponse
 import httpx
 
@@ -142,7 +142,7 @@ async def st_m3u8():
     return Response(content=empty_playlist, media_type="audio/x-mpegurl")
 
 @app.get("/playlist.json")
-async def playlist_json(request: httpx.Request):
+async def playlist_json(request: Request):
     if not cachedChannels:
         await update_channels_list()
     base_url = str(request.base_url).rstrip("/")
@@ -157,7 +157,7 @@ async def playlist_json(request: httpx.Request):
     return result
 
 @app.get("/pl.m3u8")
-async def playlist_m3u(request: httpx.Request):
+async def playlist_m3u(request: Request):
     if not cachedChannels:
         await update_channels_list()
     base_url = str(request.base_url).rstrip("/")
