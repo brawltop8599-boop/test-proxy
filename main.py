@@ -253,41 +253,38 @@ def download_json(key: str = ""):
 
 @app.get("/pl.m3u8", response_class=PlainTextResponse)
 @app.get("/playlist.m3u8", response_class=PlainTextResponse)
-def download_m3u8(key: str = "", download: int = 0):
+def download_m3u8(key: str = ""):
+    headers = {"Content-Disposition": "attachment; filename=playlist.m3u8"}
+
     if key != SECRET_KEY:
         content = (
             "#EXTM3U\n"
             "#EXTINF:-1 tvg-name=\"Xato kalit / Reklama\" group-title=\"Stub\",Xato kalit / Reklama\n"
             "https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4"
         )
-        return PlainTextResponse(content)
+        return PlainTextResponse(content, headers=headers)
 
     if not os.path.exists("playlist.json"):
-        return PlainTextResponse("#EXTM3U\n# Xatolik: Playlist hali tayyorlanmadi")
+        return PlainTextResponse("#EXTM3U\n# Xatolik: Playlist hali tayyorlanmadi", headers=headers)
 
     try:
         with open("playlist.json", "r", encoding="utf-8") as f:
             channels = json.load(f)
     except Exception:
-        return PlainTextResponse("#EXTM3U\n# Xatolik: Playlistni o'qib bo'lmadi")
+        return PlainTextResponse("#EXTM3U\n# Xatolik: Playlistni o'qib bo'lmadi", headers=headers)
 
     m3u_lines = ["#EXTM3U"]
     for index, ch in enumerate(channels):
         name = ch.get("name", "Kanal")
         group = ch.get("group", "Umumiy")
-        logo = ch.get("logo", "")
         stream_link = f"{BASE_PROXY_URL}/ch/{index}?key={SECRET_KEY}"
         
-        m3u_line = f"#EXTINF:-1 tvg-name=\"{name}\" tvg-logo=\"{logo}\" group-title=\"{group}\",{name}"
+        # Пиконы убраны, осталась чистая строка без tvg-logo
+        m3u_line = f"#EXTINF:-1 tvg-name=\"{name}\" group-title=\"{group}\",{name}"
         m3u_lines.append(m3u_line)
         m3u_lines.append(stream_link)
 
     playlist_content = "\n".join(m3u_lines)
-    
-    headers = {}
-    if download == 1:
-        headers["Content-Disposition"] = "attachment; filename=playlist.m3u8"
-        
     return PlainTextResponse(playlist_content, headers=headers)
 
 @app.get("/ch/{index}")
