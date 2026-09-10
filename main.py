@@ -324,16 +324,26 @@ def proxy_stream(index: int, key: str = ""):
     except Exception as e:
         print(f"Create link xatolik (stream): {e}")
 
-    if not stream_url and "http" in cmd:
-        stream_url = cmd
+    # ЕСЛИ портал вернул кривую или относительную ссылку (например, начинает с /ch/ или без нормального хоста)
+    if not stream_url or stream_url.startswith("/ch/") or ("://" not in stream_url and not stream_url.startswith("/")):
+        # Пробуем вытащить прямой URL из оригинальной команды cmd
+        fallback_url = cmd
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
-            if stream_url.startswith(prefix):
-                stream_url = stream_url[len(prefix):].strip()
+            if fallback_url.startswith(prefix):
+                fallback_url = fallback_url[len(prefix):].strip()
+        
+        if "://" in fallback_url:
+            stream_url = fallback_url
 
-    if stream_url.startswith("/"):
+    # Стандартная обработка относительных путей, если это действительно папка на портале
+    if stream_url.startswith("/") and not stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}{stream_url}"
-    elif not stream_url.startswith("http") and stream_url:
+    elif not stream_url.startswith("http") and stream_url and not stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}/{stream_url}"
+
+    # Если всё еще ведет на странный /ch/ — подстрахуемся и заменим на прямой фаллбек или выдадим ошибку
+    if stream_url.startswith("/ch/"):
+        stream_url = f"{PORTAL_BASE}{stream_url}"
 
     if stream_url and "token=" not in stream_url:
         session_token = session.cookies.get("token")
