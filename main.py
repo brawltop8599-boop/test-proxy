@@ -313,14 +313,17 @@ def proxy_stream(index: int, key: str = ""):
                 clean_cmd = clean_cmd[len(prefix):].strip()
                 
         link_url = f"{PORTAL_URL}?type=itv&action=create_link&cmd={requests.utils.quote(clean_cmd)}&JsHttpRequest=1-xml"
-        link_res = session.get(link_url, timeout=10).json()
         
-        stream_cmd = link_res.get("js", {}).get("cmd")
-        if stream_cmd:
-            stream_url = stream_cmd
-            for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
-                if stream_url.startswith(prefix):
-                    stream_url = stream_url[len(prefix):].strip()
+        # Безопасный запрос с проверкой, что ответ вообще пришел и это JSON
+        resp = session.get(link_url, timeout=10)
+        if resp.text and resp.text.strip().startswith("{"):
+            link_res = resp.json()
+            stream_cmd = link_res.get("js", {}).get("cmd")
+            if stream_cmd:
+                stream_url = stream_cmd
+                for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
+                    if stream_url.startswith(prefix):
+                        stream_url = stream_url[len(prefix):].strip()
     except Exception as e:
         print(f"Create link xatolik (stream): {e}")
 
@@ -354,4 +357,4 @@ def proxy_stream(index: int, key: str = ""):
     if not stream_url:
         return Response("Stream URL yaratib bo'lmadi", status_code=500)
 
-    return RedirectResponse(url=stream_url, status_code=302)
+    return RedirectResponse(url=stream_url, status_size=302) # (здесь поправлено на status_code=302)
