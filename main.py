@@ -3,13 +3,15 @@ import json
 import os
 import threading
 import time
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 import requests
 
 PORTAL_URL = "http://app.ttt5.me/stalker_portal/server/load.php"
 MAC_BASE = "00:1A:79:69:E5:45"
-BASE_PROXY_URL = "https://test-proxy-soz4.onrender.com"
+BASE_PROXY_URL = "https://blacktulipstav.onrender.com"
+SECRET_KEY = "TvZaTak"
+TELEGRAM_GROUP_URL = "https://t.me/+2lWVU6CKQsVkMWRi"  
 
 app = FastAPI()
 
@@ -26,7 +28,6 @@ session_created_time = 0
 def get_session(force_new=False):
     global global_session, session_created_time
     
-    # Agar majburiy yangilash talab qilinmasa va sessiya 5 daqiqadan oshmagan bo'lsa
     if not force_new and global_session and (time.time() - session_created_time) < 300:
         return global_session
 
@@ -167,13 +168,10 @@ def update_playlist():
     global status_data
     status_data["status"] = "Yangilanmoqda..."
 
-    # 1. Normal sessiya bilan urinib ko'ramiz
     session = get_session(force_new=False)
     channels, genres_map = fetch_channels_data(session)
 
-    # Agar kanallar topilmasa, sessiyani majburiy yangilab (force_new=True) qaytadan urinib ko'ramiz
     if not channels:
-        print("Kanallar topilmadi, yangi sessiya ochilmoqda...")
         session = get_session(force_new=True)
         channels, genres_map = fetch_channels_data(session)
 
@@ -226,42 +224,21 @@ def startup_event():
     t = threading.Thread(target=background_worker, daemon=True)
     t.start()
 
-@app.get("/", response_class=HTMLResponse)
-def admin_panel():
-    return f"""
-    <!DOCTYPE html>
-    <html lang="uz">
-    <head>
-        <meta charset="UTF-8">
-        <title>IPTV Admin Panel</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 50px; }}
-            .card {{ background: #1e293b; padding: 30px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }}
-            .badge {{ background: #22c55e; color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; }}
-            a {{ color: #38bdf8; text-decoration: none; display: block; margin-top: 15px; font-size: 18px; }}
-            a:hover {{ text-decoration: underline; }}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>🚀 IPTV Proxy Admin Panel</h2>
-            <p>Holati: <span class="badge">{status_data["status"]}</span></p>
-            <p><b>Kanallar soni:</b> {status_data["total_channels"]} ta</p>
-            <p><b>Oxirgi yangilangan vaqt:</b> {status_data["last_update"]}</p>
-            <hr style="border: 0.5px solid #334155; margin: 20px 0;">
-            <a href="/pl.m3u8" target="_blank">📥 M3U Playlist (/pl.m3u8)</a>
-            <a href="/playlist.json" target="_blank" style="color: #94a3b8; font-size: 14px;">📄 JSON ni ko'rish (/playlist.json)</a>
-        </div>
-    </body>
-    </html>
-    """
+@app.get("/", response_class=RedirectResponse)
+def root_redirect():
+    # Главная страница перенаправляет в Telegram группу
+    return RedirectResponse(url=TELEGRAM_GROUP_URL, status_code=302)
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
 @app.get("/playlist.json")
-def download_json():
+def download_json(key: str = ""):
+    if key != SECRET_KEY:
+        # При неверном ключе возвращаем заглушку
+        return [{"name": "Reklama / Xatolik", "group": "Stub", "logo": "", "url": "https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4"}]
+
     if os.path.exists("playlist.json"):
         with open("playlist.json", "r", encoding="utf-8") as f:
             channels = json.load(f)
@@ -271,13 +248,21 @@ def download_json():
                 "name": ch["name"],
                 "group": ch.get("group", "Umumiy"),
                 "logo": ch.get("logo", ""),
-                "url": f"{BASE_PROXY_URL}/stream/{index}"
+                "url": f"{BASE_PROXY_URL}/stream/{index}?key={SECRET_KEY}"
             })
         return result
     return JSONResponse(content={"error": "Hali playlist tayyor emas!"}, status_code=404)
 
 @app.get("/pl.m3u8", response_class=PlainTextResponse)
-def download_m3u8():
+def download_m3u8(key: str = ""):
+    if key != SECRET_KEY:
+        # Если ключ неверный, плейлист будет состоять только из видео-заглушки
+        return (
+            "#EXTM3U\n"
+            "#EXTINF:-1 tvg-name=\"Xato kalit / Reklama\" group-title=\"Stub\",Xato kalit / Reklama\n"
+            "https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4"
+        )
+
     if not os.path.exists("playlist.json"):
         return "#EXTM3U\n# Xatolik: Playlist hali tayyorlanmadi"
 
@@ -292,7 +277,7 @@ def download_m3u8():
         name = ch.get("name", "Kanal")
         group = ch.get("group", "Umumiy")
         logo = ch.get("logo", "")
-        stream_link = f"{BASE_PROXY_URL}/stream/{index}"
+        stream_link = f"{BASE_PROXY_URL}/stream/{index}?key={SECRET_KEY}"
         
         m3u_line = f"#EXTINF:-1 tvg-name=\"{name}\" tvg-logo=\"{logo}\" group-title=\"{group}\",{name}"
         m3u_lines.append(m3u_line)
@@ -301,7 +286,11 @@ def download_m3u8():
     return "\n".join(m3u_lines)
 
 @app.get("/stream/{index}")
-def proxy_stream(index: int):
+def proxy_stream(index: int, key: str = ""):
+    # Проверка ключа безопасности
+    if key != SECRET_KEY:
+        return RedirectResponse(url="https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4", status_code=302)
+
     if not os.path.exists("playlist.json"):
         return Response("Playlist topilmadi", status_code=404)
     
