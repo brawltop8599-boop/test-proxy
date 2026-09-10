@@ -303,7 +303,21 @@ def proxy_stream(index: int, key: str = ""):
     except Exception as e:
         return Response(f"Kanal topilmadi: {e}", status_code=404)
 
-    session = get_session()
+    # Берем свежую или принудительно обновляем сессию для каждого запроса потока,
+    # чтобы токен всегда был актуальным
+    session = get_session(force_new=False)
+    
+    # Дополнительно подстрахуемся и обновим токен прямо сейчас, если сессия старая
+    try:
+        hs_url = "http://app.ttt5.me/stalker_portal/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
+        r = session.get(hs_url, timeout=5).json()
+        new_token = r.get("js", {}).get("token", "")
+        if new_token:
+            session.cookies.set("token", new_token, domain="app.ttt5.me")
+            session.headers.update({"Authorization": f"Bearer {new_token}"})
+    except Exception:
+        pass
+
     stream_url = ""
     
     try:
@@ -324,9 +338,8 @@ def proxy_stream(index: int, key: str = ""):
     except Exception as e:
         print(f"Create link xatolik (stream): {e}")
 
-    # ЕСЛИ портал вернул кривую или относительную ссылку (например, начинает с /ch/ или без нормального хоста)
+    # Если портал вернул кривую ссылку
     if not stream_url or stream_url.startswith("/ch/") or ("://" not in stream_url and not stream_url.startswith("/")):
-        # Пробуем вытащить прямой URL из оригинальной команды cmd
         fallback_url = cmd
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
             if fallback_url.startswith(prefix):
@@ -335,16 +348,15 @@ def proxy_stream(index: int, key: str = ""):
         if "://" in fallback_url:
             stream_url = fallback_url
 
-    # Стандартная обработка относительных путей, если это действительно папка на портале
     if stream_url.startswith("/") and not stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}{stream_url}"
     elif not stream_url.startswith("http") and stream_url and not stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}/{stream_url}"
 
-    # Если всё еще ведет на странный /ch/ — подстрахуемся и заменим на прямой фаллбек или выдадим ошибку
     if stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}{stream_url}"
 
+    # Прикрепляем самый свежий токен из сессии
     if stream_url and "token=" not in stream_url:
         session_token = session.cookies.get("token")
         if session_token:
