@@ -246,43 +246,53 @@ def download_json(key: str = ""):
                 "name": ch["name"],
                 "group": ch.get("group", "Umumiy"),
                 "logo": ch.get("logo", ""),
-                "url": f"{BASE_PROXY_URL}/stream/{index}?key={SECRET_KEY}"
+                "url": f"{BASE_PROXY_URL}/ch/{index}?key={SECRET_KEY}"
             })
         return result
     return JSONResponse(content={"error": "Hali playlist tayyor emas!"}, status_code=404)
 
+# Поддержка путей /pl.m3u8 и /playlist.m3u8 для открытия в браузере с заголовком скачивания
 @app.get("/pl.m3u8", response_class=PlainTextResponse)
-def download_m3u8(key: str = ""):
+@app.get("/playlist.m3u8", response_class=PlainTextResponse)
+def download_m3u8(key: str = "", download: int = 0):
     if key != SECRET_KEY:
-        return (
+        content = (
             "#EXTM3U\n"
             "#EXTINF:-1 tvg-name=\"Xato kalit / Reklama\" group-title=\"Stub\",Xato kalit / Reklama\n"
             "https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4"
         )
+        return PlainTextResponse(content)
 
     if not os.path.exists("playlist.json"):
-        return "#EXTM3U\n# Xatolik: Playlist hali tayyorlanmadi"
+        return PlainTextResponse("#EXTM3U\n# Xatolik: Playlist hali tayyorlanmadi")
 
     try:
         with open("playlist.json", "r", encoding="utf-8") as f:
             channels = json.load(f)
     except Exception:
-        return "#EXTM3U\n# Xatolik: Playlistni o'qib bo'lmadi"
+        return PlainTextResponse("#EXTM3U\n# Xatolik: Playlistni o'qib bo'lmadi")
 
     m3u_lines = ["#EXTM3U"]
     for index, ch in enumerate(channels):
         name = ch.get("name", "Kanal")
         group = ch.get("group", "Umumiy")
         logo = ch.get("logo", "")
-        stream_link = f"{BASE_PROXY_URL}/stream/{index}?key={SECRET_KEY}"
+        stream_link = f"{BASE_PROXY_URL}/ch/{index}?key={SECRET_KEY}"
         
         m3u_line = f"#EXTINF:-1 tvg-name=\"{name}\" tvg-logo=\"{logo}\" group-title=\"{group}\",{name}"
         m3u_lines.append(m3u_line)
         m3u_lines.append(stream_link)
 
-    return "\n".join(m3u_lines)
+    playlist_content = "\n".join(m3u_lines)
+    
+    # Если передан параметр download=1, браузер принудительно скачает файл
+    headers = {}
+    if download == 1:
+        headers["Content-Disposition"] = "attachment; filename=playlist.m3u8"
+        
+    return PlainTextResponse(playlist_content, headers=headers)
 
-@app.get("/stream/{index}")
+@app.get("/ch/{index}")
 def proxy_stream(index: int, key: str = ""):
     if key != SECRET_KEY:
         return RedirectResponse(url="https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4", status_code=302)
@@ -325,14 +335,13 @@ def proxy_stream(index: int, key: str = ""):
             if stream_url.startswith(prefix):
                 stream_url = stream_url[len(prefix):].strip()
 
-    # Исправление для относительных путей (если портал вернул /ch/645...)
     if stream_url.startswith("/"):
         stream_url = f"{PORTAL_BASE}{stream_url}"
     elif not stream_url.startswith("http") and stream_url:
         stream_url = f"{PORTAL_BASE}/{stream_url}"
 
     if stream_url and "token=" not in stream_url:
-        session_token = session.cookies.get("token")
+        session_token = session.cookies.get:("token") if hasattr(session.cookies, "get") else session.cookies.get("token")
         if session_token:
             separator = "&" if "?" in stream_url else "?"
             stream_url = f"{stream_url}{separator}token={session_token}"
