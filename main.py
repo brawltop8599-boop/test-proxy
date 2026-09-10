@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 import requests
 
 PORTAL_URL = "http://app.ttt5.me/stalker_portal/server/load.php"
+PORTAL_BASE = "http://app.ttt5.me"
 MAC_BASE = "00:1A:79:69:E5:45"
 BASE_PROXY_URL = "https://blacktulipstav.onrender.com"
 SECRET_KEY = "TvZaTak"
@@ -21,7 +22,6 @@ status_data = {
     "status": "Ishga tushmoqda...",
 }
 
-# Sessiyani xotirada saqlash uchun o'zgaruvchilar
 global_session = None
 session_created_time = 0
 
@@ -226,7 +226,6 @@ def startup_event():
 
 @app.get("/", response_class=RedirectResponse)
 def root_redirect():
-    # Главная страница перенаправляет в Telegram группу
     return RedirectResponse(url=TELEGRAM_GROUP_URL, status_code=302)
 
 @app.get("/health")
@@ -236,7 +235,6 @@ def health_check():
 @app.get("/playlist.json")
 def download_json(key: str = ""):
     if key != SECRET_KEY:
-        # При неверном ключе возвращаем заглушку
         return [{"name": "Reklama / Xatolik", "group": "Stub", "logo": "", "url": "https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4"}]
 
     if os.path.exists("playlist.json"):
@@ -256,7 +254,6 @@ def download_json(key: str = ""):
 @app.get("/pl.m3u8", response_class=PlainTextResponse)
 def download_m3u8(key: str = ""):
     if key != SECRET_KEY:
-        # Если ключ неверный, плейлист будет состоять только из видео-заглушки
         return (
             "#EXTM3U\n"
             "#EXTINF:-1 tvg-name=\"Xato kalit / Reklama\" group-title=\"Stub\",Xato kalit / Reklama\n"
@@ -287,7 +284,6 @@ def download_m3u8(key: str = ""):
 
 @app.get("/stream/{index}")
 def proxy_stream(index: int, key: str = ""):
-    # Проверка ключа безопасности
     if key != SECRET_KEY:
         return RedirectResponse(url="https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4", status_code=302)
 
@@ -328,6 +324,12 @@ def proxy_stream(index: int, key: str = ""):
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
             if stream_url.startswith(prefix):
                 stream_url = stream_url[len(prefix):].strip()
+
+    # Исправление для относительных путей (если портал вернул /ch/645...)
+    if stream_url.startswith("/"):
+        stream_url = f"{PORTAL_BASE}{stream_url}"
+    elif not stream_url.startswith("http") and stream_url:
+        stream_url = f"{PORTAL_BASE}/{stream_url}"
 
     if stream_url and "token=" not in stream_url:
         session_token = session.cookies.get("token")
