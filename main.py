@@ -288,138 +288,70 @@ def download_m3u8(key: str = ""):
     return PlainTextResponse(playlist_content, headers=headers)
 
 @app.get("/ch/{index}")
-
 def proxy_stream(index: int, key: str = ""):
-
     if key != SECRET_KEY:
-
         return RedirectResponse(url="https://github.com/brawltop8599-boop/ads-stub/raw/refs/heads/main/v.mp4", status_code=302)
 
-
-
     if not os.path.exists("playlist.json"):
-
         return Response("Playlist topilmadi", status_code=404)
-
     
-
     try:
-
         with open("playlist.json", "r", encoding="utf-8") as f:
-
             channels = json.load(f)
-
         target = channels[index]
-
         cmd = target.get("cmd", "")
-
     except Exception as e:
-
         return Response(f"Kanal topilmadi: {e}", status_code=404)
 
-
-
     session = get_session()
-
     stream_url = ""
-
     
-
     try:
-
         clean_cmd = cmd
-
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
-
             if clean_cmd.startswith(prefix):
-
                 clean_cmd = clean_cmd[len(prefix):].strip()
-
                 
-
         link_url = f"{PORTAL_URL}?type=itv&action=create_link&cmd={requests.utils.quote(clean_cmd)}&JsHttpRequest=1-xml"
-
         link_res = session.get(link_url, timeout=10).json()
-
         
-
         stream_cmd = link_res.get("js", {}).get("cmd")
-
         if stream_cmd:
-
             stream_url = stream_cmd
-
             for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
-
                 if stream_url.startswith(prefix):
-
                     stream_url = stream_url[len(prefix):].strip()
-
     except Exception as e:
-
         print(f"Create link xatolik (stream): {e}")
 
-
-
-    # ЕСЛИ портал вернул кривую или относительную ссылку (например, начинает с /ch/ или без нормального хоста)
-
+    # ЕСЛИ портал вернул пустой ответ, кривой путь или дурацкий /ch/ — сразу берем чистый адрес из cmd
     if not stream_url or stream_url.startswith("/ch/") or ("://" not in stream_url and not stream_url.startswith("/")):
-
-        # Пробуем вытащить прямой URL из оригинальной команды cmd
-
         fallback_url = cmd
-
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
-
             if fallback_url.startswith(prefix):
-
                 fallback_url = fallback_url[len(prefix):].strip()
-
         
-
         if "://" in fallback_url:
-
             stream_url = fallback_url
 
-
-
-    # Стандартная обработка относительных путей, если это действительно папка на портале
-
+    # Если это нормальный относительный путь (не /ch/)
     if stream_url.startswith("/") and not stream_url.startswith("/ch/"):
-
         stream_url = f"{PORTAL_BASE}{stream_url}"
-
     elif not stream_url.startswith("http") and stream_url and not stream_url.startswith("/ch/"):
-
         stream_url = f"{PORTAL_BASE}/{stream_url}"
 
-
-
-    # Если всё еще ведет на странный /ch/ — подстрахуемся и заменим на прямой фаллбек или выдадим ошибку
-
+    # Жесткая защита: если на выходе всё еще остался левый /ch/, стираем его, чтобы не кидало на 404
     if stream_url.startswith("/ch/"):
+        stream_url = ""
 
-        stream_url = f"{PORTAL_BASE}{stream_url}"
-
-
-
+    # Прицепляем токен сессии, если его нет в ссылке
     if stream_url and "token=" not in stream_url:
-
         session_token = session.cookies.get("token")
-
         if session_token:
-
             separator = "&" if "?" in stream_url else "?"
-
             stream_url = f"{stream_url}{separator}token={session_token}"
 
-
-
     if not stream_url:
-
         return Response("Stream URL yaratib bo'lmadi", status_code=500)
 
-
-
-    return RedirectResponse(url=stream_url, status_code=302) 
-
+    return RedirectResponse(url=stream_url, status_code=302)
