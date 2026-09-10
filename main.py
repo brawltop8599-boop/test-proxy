@@ -303,21 +303,8 @@ def proxy_stream(index: int, key: str = ""):
     except Exception as e:
         return Response(f"Kanal topilmadi: {e}", status_code=404)
 
-    # Берем свежую или принудительно обновляем сессию для каждого запроса потока,
-    # чтобы токен всегда был актуальным
-    session = get_session(force_new=False)
-    
-    # Дополнительно подстрахуемся и обновим токен прямо сейчас, если сессия старая
-    try:
-        hs_url = "http://app.ttt5.me/stalker_portal/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
-        r = session.get(hs_url, timeout=5).json()
-        new_token = r.get("js", {}).get("token", "")
-        if new_token:
-            session.cookies.set("token", new_token, domain="app.ttt5.me")
-            session.headers.update({"Authorization": f"Bearer {new_token}"})
-    except Exception:
-        pass
-
+    # Используем стандартную сессию без лишних ежесекундных handshake-запросов
+    session = get_session()
     stream_url = ""
     
     try:
@@ -327,18 +314,21 @@ def proxy_stream(index: int, key: str = ""):
                 clean_cmd = clean_cmd[len(prefix):].strip()
                 
         link_url = f"{PORTAL_URL}?type=itv&action=create_link&cmd={requests.utils.quote(clean_cmd)}&JsHttpRequest=1-xml"
-        link_res = session.get(link_url, timeout=10).json()
         
-        stream_cmd = link_res.get("js", {}).get("cmd")
-        if stream_cmd:
-            stream_url = stream_cmd
-            for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
-                if stream_url.startswith(prefix):
-                    stream_url = stream_url[len(prefix):].strip()
+        # Безопасный запрос с обработкой ответа
+        resp = session.get(link_url, timeout=10)
+        if resp.text and resp.text.strip().startswith("{"):
+            link_res = resp.json()
+            stream_cmd = link_res.get("js", {}).get("cmd")
+            if stream_cmd:
+                stream_url = stream_cmd
+                for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
+                    if stream_url.startswith(prefix):
+                        stream_url = stream_url[len(prefix):].strip()
     except Exception as e:
         print(f"Create link xatolik (stream): {e}")
 
-    # Если портал вернул кривую ссылку
+    # Если портал не смог выдать ссылку через create_link, берем прямой адрес из cmd
     if not stream_url or stream_url.startswith("/ch/") or ("://" not in stream_url and not stream_url.startswith("/")):
         fallback_url = cmd
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
@@ -356,13 +346,17 @@ def proxy_stream(index: int, key: str = ""):
     if stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}{stream_url}"
 
-    # Прикрепляем самый свежий токен из сессии
+    # Добавляем актуальный токен из кук сессии
     if stream_url and "token=" not in stream_url:
         session_token = session.cookies.get("token")
         if session_token:
             separator = "&" if "?" in stream_url else "?"
             stream_url = f"{stream_url}{separator}token={session_token}"
 
+    if not stream_url:
+        return Response("Stream URL yaratib bo'lmadi", status_code=500)
+
+    return RedirectResponse(url=stream_url, status_code=302)
     if not stream_url:
         return Response("Stream URL yaratib bo'lmadi", status_code=500)
 
