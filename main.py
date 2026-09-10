@@ -87,13 +87,14 @@ async def update_channels_list():
         async with httpx.AsyncClient(timeout=10.0) as client:
             try:
                 genres_res = await client.get(f"{PORTAL_URL}?type=itv&action=get_genres&JsHttpRequest=1-xml", headers=headers)
+                print("GENRES RES:", genres_res.status_code, genres_res.text[:200])
                 genres_json = genres_res.json()
                 genres_data = genres_json.get("js") if isinstance(genres_json.get("js"), list) else genres_json.get("js", {}).get("data", [])
                 for g in genres_data:
                     if g.get("id") and g.get("title"):
                         genres_map[g["id"]] = g["title"]
-            except Exception:
-                pass
+            except Exception as e:
+                print("ERR GENRES:", e)
 
             channels_urls = [
                 f"{PORTAL_URL}?type=itv&action=get_all_channels&JsHttpRequest=1-xml",
@@ -104,14 +105,15 @@ async def update_channels_list():
             for c_url in channels_urls:
                 try:
                     res = await client.get(c_url, headers=headers)
+                    print(f"CHANNELS RES ({c_url}):", res.status_code, res.text[:200])
                     res_json = res.json()
                     js_data = res_json.get("js")
                     data = js_data if isinstance(js_data, list) else (js_data.get("data") or js_data.get("channels") or [])
                     if isinstance(data, list) and len(data) > 0:
                         raw_channels = data
                         break
-                except Exception:
-                    pass
+                except Exception as e:
+                    print("ERR CHANNELS:", e)
 
             seen = set()
             new_channels = []
@@ -129,8 +131,11 @@ async def update_channels_list():
 
             if new_channels:
                 cachedChannels = new_channels
-    except Exception:
-        pass
+                print(f"LOADED CHANNELS COUNT: {len(cachedChannels)}")
+            else:
+                print("WARNING: new_channels is empty!")
+    except Exception as e:
+        print("CRITICAL ERROR in update_channels_list:", e)
 
 @app.get("/")
 async def root():
