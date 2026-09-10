@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import FastAPI, Response, HTTPException
+from fastapi import FastAPI, Response
 from fastapi.responses import RedirectResponse
 import httpx
 
@@ -24,7 +24,7 @@ sessionTime = 0
 
 async def get_valid_session():
     global cachedHeaders, cachedToken, sessionTime
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     now = loop.time() * 1000
     
     if cachedHeaders and cachedToken and (now - sessionTime < 300000):
@@ -60,7 +60,7 @@ async def get_valid_session():
                 headers["Authorization"] = f"Bearer {token}"
                 headers["Cookie"] += f"; token={token}"
 
-            timestamp = int(asyncio.get_event_loop().time())
+            timestamp = int(asyncio.get_running_loop().time())
             metrics = json.dumps({
                 "type": "stb", "model": "MAG254", "mac": MAC, "sn": SN, "uid": UID, "random": RANDOM
             })
@@ -185,6 +185,40 @@ async def stream(idx: int, key: str = ""):
 
     try:
         headers, token = await get_valid_session()
-        link_url = f"{PORTAL_URL}?type=itv&action=create_link&cmd={import_encode(target['cmd'])}&JsHttpRequest=1-xml"
-        # Для удобства кодирования параметров используем urllib.parse
-        ...
+        link_url = f"{PORTAL_URL}?type=itv&action=create_link&cmd={target['cmd']}&JsHttpRequest=1-xml"
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            link_res = await client.get(link_url, headers=headers)
+            link_data = link_res.json()
+            
+        js_obj = link_data.get("js", {})
+        stream_cmd = js_obj.get("cmd") or js_obj.get("url") or link_data.get("cmd") or ""
+
+        for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
+            if stream_cmd.startswith(prefix):
+                stream_cmd = stream_cmd[len(prefix):].strip()
+
+        if stream_cmd.startswith("http://") or stream_cmd.startswith("https://"):
+            stream_url = stream_cmd
+        elif stream_cmd.startswith("/"):
+            portal_obj = httpx.URL(PORTAL_URL)
+            stream_url = f"{portal_obj.scheme}://{portal_obj.host}{stream_cmd}"
+
+        if stream_url and "token=" not in stream_url and token:
+            sep = "&" if "?" in stream_url else "?"
+            stream_url = f"{stream_url}{sep}token={token}"
+    except Exception:
+        pass
+
+    if not stream_url and target.get("cmd"):
+        fallback_cmd = target["cmd"]
+        for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
+            if fallback_cmd.startswith(prefix):
+                fallback_cmd = fallback_cmd[len(prefix):].strip()
+        if fallback_cmd.startswith("http://") or fallback_cmd.startswith("https://"):
+            stream_url = fallback_cmd
+
+    if not stream_url:
+        return RedirectResponse(STUB_VIDEO_URL, status_code=302)
+
+    return RedirectResponse(stream_url, status_code=302)
