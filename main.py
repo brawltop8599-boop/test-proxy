@@ -9,7 +9,13 @@ import requests
 
 PORTAL_URL = "http://app.ttt5.me/stalker_portal/server/load.php"
 PORTAL_BASE = "http://app.ttt5.me"
-MAC_BASE = "00:1A:79:69:E5:45"
+
+# Актуальные данные из рабочего профиля ( MAG250 / MAG254 )
+MAC_BASE = "00:1A:79:67:D2:D4"
+SN_BASE = "E64E3F8B8C092"
+UID_BASE = "D19D40486081779F90A66F60EB9836A1D2A63ED493961445338D76A01F31F6D4"
+DEVICE_ID = "20FB21AA77D58B6DC9200101EED68B82C4350765274BC3373EA9758DC8F3EA9E"
+
 BASE_PROXY_URL = "https://blacktulipstav.onrender.com"
 SECRET_KEY = "TvZaTak"
 TELEGRAM_GROUP_URL = "https://t.me/+2lWVU6CKQsVkMWRi"  
@@ -55,7 +61,7 @@ def get_session(force_new=False):
         pass
 
     token = ""
-    random_val = "f113bcdf5643a1304e51821e196324694cc63b63"
+    random_val = "4bad200fb83418a95c33ea688d5b3f6e66a8428b"
     try:
         hs_url = (
             "http://app.ttt5.me/stalker_portal/server/load.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml"
@@ -75,8 +81,8 @@ def get_session(force_new=False):
         "type": "stb",
         "model": "MAG254",
         "mac": MAC_BASE,
-        "sn": "0407B4BF76218",
-        "uid": "5E1285BD5AF191EC376A28D7E5A1715CEB1AD52D1401D4AB63FDA492DB92D792",
+        "sn": SN_BASE,
+        "uid": UID_BASE,
         "random": random_val,
     })
 
@@ -85,13 +91,13 @@ def get_session(force_new=False):
         f"{PORTAL_URL}?type=stb&action=get_profile&JsHttpRequest=1-xml&hd=1"
         f"{token_param}"
         "&ver=ImageDescription: 0.2.18-r23-250; ImageDate: Thu Sep 13 11:31:16 EEST 2018; PORTAL version: 5.3.0; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c"
-        "&num_banks=2&sn=08AFC4CEE5C20&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi"
-        "&device_id=53FF962B702C6BF53568E9C1754D5DCFD40047AC4E7183D751E561144474F196"
-        "&device_id2=53FF962B702C6BF53568E9C1754D5DCFD40047AC4E7183D751E561144474F196"
-        "&signature=750D0CDFABAE18DC8CDF63CF947C8468DD8B64A6B6C8222C7C4B1FB37FB7BAA2"
+        f"&num_banks=2&sn={SN_BASE}&stb_type=MAG250&client_type=STB&image_version=218&video_out=hdmi"
+        f"&device_id={DEVICE_ID}"
+        f"&device_id2={DEVICE_ID}"
+        "&signature=4DAC1263BD6BD25A678F2AE3059F96F4CDF1D48AD2B3F820F136E71B40F01A2F"
         "&auth_second_step=1&hw_version=1.7-BD-00&not_valid_token=0"
         f"&metrics={metrics_data}"
-        f"&hw_version_2=993f7da2a2a6bf7fd7e91daff521f0329b92803&timestamp={int(time.time())}&api_signature=262&prehash=f72d83731a918aa2171706f4a6100b76cd0062d8"
+        f"&hw_version_2=ad96e26ccf429593faf5bd56a006a05b7ff13a61&timestamp={int(time.time())}&api_signature=262&prehash=501706164d318322b9196c8038c76d3233468725"
     )
     try:
         session.get(prof_url, timeout=10)
@@ -279,7 +285,6 @@ def download_m3u8(key: str = ""):
         group = ch.get("group", "Umumiy")
         stream_link = f"{BASE_PROXY_URL}/ch/{index}?key={SECRET_KEY}"
         
-        # Пиконы убраны, осталась чистая строка без tvg-logo
         m3u_line = f"#EXTINF:-1 tvg-name=\"{name}\" group-title=\"{group}\",{name}"
         m3u_lines.append(m3u_line)
         m3u_lines.append(stream_link)
@@ -324,7 +329,6 @@ def proxy_stream(index: int, key: str = ""):
     except Exception as e:
         print(f"Create link xatolik (stream): {e}")
 
-    # ЕСЛИ портал вернул пустой ответ, кривой путь или дурацкий /ch/ — сразу берем чистый адрес из cmd
     if not stream_url or stream_url.startswith("/ch/") or ("://" not in stream_url and not stream_url.startswith("/")):
         fallback_url = cmd
         for prefix in ["ffmpeg ", "ch:ffrt ", "ffrt ", "ch:"]:
@@ -334,17 +338,14 @@ def proxy_stream(index: int, key: str = ""):
         if "://" in fallback_url:
             stream_url = fallback_url
 
-    # Если это нормальный относительный путь (не /ch/)
     if stream_url.startswith("/") and not stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}{stream_url}"
     elif not stream_url.startswith("http") and stream_url and not stream_url.startswith("/ch/"):
         stream_url = f"{PORTAL_BASE}/{stream_url}"
 
-    # Жесткая защита: если на выходе всё еще остался левый /ch/, стираем его, чтобы не кидало на 404
     if stream_url.startswith("/ch/"):
         stream_url = ""
 
-    # Прицепляем токен сессии, если его нет в ссылке
     if stream_url and "token=" not in stream_url:
         session_token = session.cookies.get("token")
         if session_token:
