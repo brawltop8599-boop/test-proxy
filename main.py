@@ -251,7 +251,6 @@ def download_json(key: str = ""):
         return result
     return JSONResponse(content={"error": "Hali playlist tayyor emas!"}, status_code=404)
 
-# Поддержка путей /pl.m3u8 и /playlist.m3u8 для открытия в браузере с заголовком скачивания
 @app.get("/pl.m3u8", response_class=PlainTextResponse)
 @app.get("/playlist.m3u8", response_class=PlainTextResponse)
 def download_m3u8(key: str = "", download: int = 0):
@@ -285,7 +284,6 @@ def download_m3u8(key: str = "", download: int = 0):
 
     playlist_content = "\n".join(m3u_lines)
     
-    # Если передан параметр download=1, браузер принудительно скачает файл
     headers = {}
     if download == 1:
         headers["Content-Disposition"] = "attachment; filename=playlist.m3u8"
@@ -341,7 +339,7 @@ def proxy_stream(index: int, key: str = ""):
         stream_url = f"{PORTAL_BASE}/{stream_url}"
 
     if stream_url and "token=" not in stream_url:
-        session_token = session.cookies.get:("token") if hasattr(session.cookies, "get") else session.cookies.get("token")
+        session_token = session.cookies.get("token")
         if session_token:
             separator = "&" if "?" in stream_url else "?"
             stream_url = f"{stream_url}{separator}token={session_token}"
